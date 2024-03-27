@@ -102,3 +102,15 @@ sys_trace(void)
 
     return 0;
 }
+
+uint64
+sys_sysinfo(void)
+{
+  uint64 addr;
+  argaddr(0, &addr);  // user pointer to struct sysinfo
+
+  uint64 freemem = free_memory();  // kalloc.c
+  uint64 nproc = num_process();  // proc.c
+
+  return get_sysinfo(freemem, nproc, addr);  // proc.c
+}
