@@ -9,34 +9,35 @@
 /*
  * the kernel's page table.
  */
-pagetable_t kernel_pagetable;
+pagetable_t kernel_pagetable;  // pointer to root pagetable
 
 extern char etext[];  // kernel.ld sets this to end of kernel code.
 
 extern char trampoline[]; // trampoline.S
 
 // Make a direct-map page table for the kernel.
+// 这个函数发生在xv6启动分页之前，因此地址直接引用物理内存
 pagetable_t
 kvmmake(void)
 {
   pagetable_t kpgtbl;
 
-  kpgtbl = (pagetable_t) kalloc();
-  memset(kpgtbl, 0, PGSIZE);
+  kpgtbl = (pagetable_t) kalloc();  // 根页表页
+  memset(kpgtbl, 0, PGSIZE);  // fill this page table with 0
 
-  // uart registers
+  // uart registers 串口控制器
   kvmmap(kpgtbl, UART0, UART0, PGSIZE, PTE_R | PTE_W);
 
-  // virtio mmio disk interface
+  // virtio mmio disk interface 虚拟I/O
   kvmmap(kpgtbl, VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W);
 
-  // PLIC
+  // PLIC 平台级中断控制器
   kvmmap(kpgtbl, PLIC, PLIC, 0x400000, PTE_R | PTE_W);
 
-  // map kernel text executable and read-only.
+  // map kernel text executable and read-only. 内核代码
   kvmmap(kpgtbl, KERNBASE, KERNBASE, (uint64)etext-KERNBASE, PTE_R | PTE_X);
 
-  // map kernel data and the physical RAM we'll make use of.
+  // map kernel data and the physical RAM we'll make use of.内核数据
   kvmmap(kpgtbl, (uint64)etext, (uint64)etext, PHYSTOP-(uint64)etext, PTE_R | PTE_W);
 
   // map the trampoline for trap entry/exit to
@@ -44,6 +45,7 @@ kvmmake(void)
   kvmmap(kpgtbl, TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X);
 
   // allocate and map a kernel stack for each process.
+  // 为每个进程分配和映射内核栈
   proc_mapstacks(kpgtbl);
   
   return kpgtbl;
@@ -58,13 +60,15 @@ kvminit(void)
 
 // Switch h/w page table register to the kernel's page table,
 // and enable paging.
+// main调用，安装内核页表
 void
 kvminithart()
 {
   // wait for any previous writes to the page table memory to finish.
+  // sfence.vma是RISC-V指令，用于等待之前对页表内存的写操作完成，并刷新TLB
   sfence_vma();
 
-  w_satp(MAKE_SATP(kernel_pagetable));
+  w_satp(MAKE_SATP(kernel_pagetable));  // 将根页表页的物理地址写入寄存器satp
 
   // flush stale entries from the TLB.
   sfence_vma();
@@ -89,16 +93,26 @@ walk(pagetable_t pagetable, uint64 va, int alloc)
     panic("walk");
 
   for(int level = 2; level > 0; level--) {
-    pte_t *pte = &pagetable[PX(level, va)];
+    // 根据当前level，对va进行移位和掩码操作，得到当前level页表中的对应PTE条目
+    pte_t *pte = &pagetable[PX(level, va)]; // 从PTE中提取下一级页表的paddr
     if(*pte & PTE_V) {
+      // 提取物理地址，对应一个页的首地址
+      // 将最右10位标志位移出，补充12位全0的offset，原44位PPN保留，得到指向下一层页表的PA
+      // level = 2，pagetable指向level = 1的页表
+      // level = 1，pagetable指向level = 0的页表
       pagetable = (pagetable_t)PTE2PA(*pte);
     } else {
+      // 对应的PTE不存在且alloc被置位，则为该PTE指向的下一层页表分配一页
       if(!alloc || (pagetable = (pde_t*)kalloc()) == 0)
         return 0;
-      memset(pagetable, 0, PGSIZE);
-      *pte = PA2PTE(pagetable) | PTE_V;
+      memset(pagetable, 0, PGSIZE);  // 新页表的所有PTE均置0
+      *pte = PA2PTE(pagetable) | PTE_V; // 更新PTE，将56位PA右移12位去除offset，移进10位标志位，PTE_V置1
     }
   }
+  // 跳出循环，pagetable指向level=0的页表
+
+  // level=0，向右移出12位，经掩码后得到9位level=0页表的PTE编号
+  // 返回va对应的level=0页表中的对应PTE
   return &pagetable[PX(0, va)];
 }
 
@@ -146,6 +160,7 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
   uint64 a, last;
   pte_t *pte;
 
+  // 检查地址是否对齐
   if((va % PGSIZE) != 0)
     panic("mappages: va not aligned");
 
@@ -158,7 +173,7 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
   a = va;
   last = va + size - PGSIZE;
   for(;;){
-    if((pte = walk(pagetable, a, 1)) == 0)
+    if((pte = walk(pagetable, a, 1)) == 0)  // walk查找或创建页表项
       return -1;
     if(*pte & PTE_V)
       panic("mappages: remap");

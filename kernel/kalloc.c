@@ -33,8 +33,8 @@ kinit()
 void
 freerange(void *pa_start, void *pa_end)
 {
-  char *p;
-  p = (char*)PGROUNDUP((uint64)pa_start);
+  char *p;  // 以1 Byte移动指针
+  p = (char*)PGROUNDUP((uint64)pa_start);  // 向上舍入
   for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE)
     kfree(p);
 }
@@ -52,7 +52,7 @@ kfree(void *pa)
     panic("kfree");
 
   // Fill with junk to catch dangling refs.
-  memset(pa, 1, PGSIZE);
+  memset(pa, 1, PGSIZE);  // 释放内存后使用内存的代码会读取垃圾
 
   r = (struct run*)pa;
 
@@ -65,6 +65,7 @@ kfree(void *pa)
 // Allocate one 4096-byte page of physical memory.
 // Returns a pointer that the kernel can use.
 // Returns 0 if the memory cannot be allocated.
+// 因为使用头插法，所以从大到小分配
 void *
 kalloc(void)
 {
