@@ -75,6 +75,33 @@ int
 sys_pgaccess(void)
 {
   // lab pgtbl: your code here.
+  // int pgaccess(void *base, int len, void *mask);
+  int n;  // number of pages
+  uint64 base_addr, mask_addr;
+  uint32 mask = 0;  // at most 32 pages
+  pagetable_t upt = myproc()->pagetable;
+  pte_t *upte;
+
+  // parse arguments
+  argint(1, &n);
+  if(n > 32) {  // define upper limit on the number of pages
+    return -1;
+  }
+  argaddr(0, &base_addr);
+  argaddr(2, &mask_addr);
+
+  upte = walk(upt, base_addr, 0);
+
+  for (int i = 0;i < n;i++) {
+    // see upte as array to traverse current pte to pte + n
+    if ((upte[i] & PTE_V) && (upte[i] & PTE_A)) {
+      mask = mask | (1 << i);
+      upte[i] = upte[i] ^ PTE_A;
+    }
+  }
+
+  copyout(upt, mask_addr, (char *)&mask, sizeof(uint32));
+
   return 0;
 }
 #endif
