@@ -53,7 +53,7 @@ usertrap(void)
   if(r_scause() == 8){
     // system call
 
-    if(killed(p))
+    if(killed(p))  // chenck if any other process kill this process
       exit(-1);
 
     // sepc points to the ecall instruction,
@@ -64,7 +64,7 @@ usertrap(void)
     // so enable only now that we're done with those registers.
     intr_on();
 
-    syscall();
+    syscall();  // call syscall
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {

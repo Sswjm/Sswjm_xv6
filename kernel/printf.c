@@ -133,3 +133,29 @@ printfinit(void)
   initlock(&pr.lock, "pr");
   pr.locking = 1;
 }
+
+void
+backtrace(void)
+{
+  uint64 *fp;
+  uint64 raddr = 0; // return address
+  uint64 upper, lower;
+
+  fp = (uint64 *)r_fp();  // get currnet fp
+  printf("backtrace\n", fp);
+
+  lower = PGROUNDDOWN((uint64)fp);
+  upper = PGROUNDUP((uint64)fp);
+
+  while(((uint64)fp < upper) && ((uint64)fp > lower)) {
+    raddr = (uint64)fp[-1];
+    //printf("%p\n", fp[-2]);
+    //printf("%p\n", (uint64 *)fp[-2]);
+    fp = (uint64 *)fp[-2];
+    printf("%p\n", raddr);
+    //printf("fp:%p\n", (uint64)fp);
+    //printf("prefp:%p\n", fp[-2]);
+    //printf("pgfp:%p\n", PGROUNDDOWN((uint64)fp));
+    //printf("pgprefp:%p\n", PGROUNDDOWN(fp[-2]));
+  }
+}
